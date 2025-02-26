@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>智能库存管理系统</title>
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --background: #f5f7fa;
+            --card-bg: #ffffff;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui;
+            margin: 0;
+            padding: 2rem;
+            background: var(--background);
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .form-group {
+            margin-bottom: 1.2rem;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 0.8rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-top: 0.4rem;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th, td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .positive { color: #34a853; }
+        .negative { color: #ea4335; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 商品管理 -->
+        <div class="card">
+            <h2>商品管理</h2>
+            <form id="productForm">
+                <div class="form-group">
+                    <label>商品种类</label>
+                    <input type="text" id="category" required>
+                </div>
+                <div class="form-group">
+                    <label>商品名称</label>
+                    <input type="text" id="productName" required>
+                </div>
+                <div class="form-group">
+                    <label>初始数量</label>
+                    <input type="number" id="initialQuantity" value="0" min="0" required>
+                </div>
+                <button type="submit">添加商品</button>
+            </form>
+        </div>
+
+        <!-- 库存操作 -->
+        <div class="card">
+            <h2>库存操作</h2>
+            <div class="form-group">
+                <select id="productSelect">
+                    <option value="">选择商品</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <input type="number" id="quantityChange" placeholder="输入数量（正数进货，负数出货）">
+            </div>
+            <button onclick="handleTransaction()">执行操作</button>
+        </div>
+
+        <!-- 商品列表 -->
+        <div class="card" style="grid-column: 1 / -1">
+            <h3>库存总览</h3>
+            <table id="inventoryTable">
+                <thead>
+                    <tr>
+                        <th>种类</th>
+                        <th>商品名称</th>
+                        <th>当前库存</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <!-- 操作记录 -->
+        <div class="card" style="grid-column: 1 / -1">
+            <h3>操作记录</h3>
+            <table id="historyTable">
+                <thead>
+                    <tr>
+                        <th>时间</th>
+                        <th>操作类型</th>
+                        <th>商品名称</th>
+                        <th>数量变化</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // 本地存储初始化
+        let inventory = JSON.parse(localStorage.getItem('inventory')) || [];
+        let history = JSON.parse(localStorage.getItem('history')) || [];
+
+        // 表单提交处理
+        document.getElementById('productForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const newProduct = {
+                id: Date.now(),
+                category: document.getElementById('category').value,
+                name: document.getElementById('productName').value,
+                quantity: parseInt(document.getElementById('initialQuantity').value)
+            };
+            
+            inventory.push(newProduct);
+            updateLocalStorage();
+            updateProductSelect();
+            renderTables();
+            e.target.reset();
+        });
+
+        // 库存操作处理
+        function handleTransaction() {
+            const productId = parseInt(document.getElementById('productSelect').value);
+            const change = parseInt(document.getElementById('quantityChange').value);
+            
+            if (!productId || isNaN(change)) {
+                alert('请选择商品并输入有效数量');
+                return;
+            }
+
+            const product = inventory.find(p => p.id === productId);
+            if (!product) return;
+
+            if (product.quantity + change < 0) {
+                alert('库存数量不足！');
+                return;
+            }
+
+            product.quantity += change;
+            
+            // 记录操作历史
+            history.unshift({
+                timestamp: new Date().toLocaleString(),
+                type: change > 0 ? '进货' : '出货',
+                productName: product.name,
+                change: change
+            });
+
+            updateLocalStorage();
+            renderTables();
+            document.getElementById('quantityChange').value = '';
+        }
+
+        // 更新本地存储
+        function updateLocalStorage() {
+            localStorage.setItem('inventory', JSON.stringify(inventory));
+            localStorage.setItem('history', JSON.stringify(history));
+        }
+
+        // 更新商品选择器
+        function updateProductSelect() {
+            const select = document.getElementById('productSelect');
+            select.innerHTML = '<option value="">选择商品</option>';
+            inventory.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.id;
+                option.textContent = `${product.category} - ${product.name}`;
+                select.appendChild(option);
+            });
+        }
+
+        // 渲染表格
+        function renderTables() {
+            // 库存表格
+            const inventoryTbody = document.querySelector('#inventoryTable tbody');
+            inventoryTbody.innerHTML = inventory.map(product => `
+                <tr>
+                    <td>${product.category}</td>
+                    <td>${product.name}</td>
+                    <td>${product.quantity}</td>
+                </tr>
+            `).join('');
+
+            // 历史记录表格
+            const historyTbody = document.querySelector('#historyTable tbody');
+            historyTbody.innerHTML = history.map(record => `
+                <tr>
+                    <td>${record.timestamp}</td>
+                    <td>${record.type}</td>
+                    <td>${record.productName}</td>
+                    <td class="${record.change > 0 ? 'positive' : 'negative'}">
+                        ${record.change > 0 ? '+' : ''}${record.change}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        // 初始化
+        updateProductSelect();
+        renderTables();
+    </script>
+</body>
+</html>
