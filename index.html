@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>蚂蚁安全实验室库存系统</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #3498db;
+            --background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Segoe UI', sans-serif;
+            background: var(--background);
+        }
+
+        .login-container {
+            width: 350px;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .main-container {
+            display: none;
+            padding: 30px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            backdrop-filter: blur(10px);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+        }
+
+        input, select, button {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin: 8px 0;
+            width: 100%;
+            box-sizing: border-box;
+            transition: all 0.3s ease;
+        }
+
+        button {
+            background: var(--secondary);
+            color: white;
+            border: none;
+            cursor: pointer;
+            padding: 12px 25px;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+
+        .record-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .stock-item {
+            padding: 15px;
+            background: rgba(245, 245, 245, 0.9);
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .highlight {
+            color: var(--secondary);
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <!-- 登录界面 -->
+    <div class="login-container">
+        <h2>🔒 蚂蚁安全实验室</h2>
+        <input type="text" id="username" placeholder="账号">
+        <input type="password" id="password" placeholder="密码">
+        <button onclick="login()">解锁系统</button>
+    </div>
+
+    <!-- 主界面 -->
+    <div class="main-container">
+        <div class="card">
+            <h2>📦 库存管理</h2>
+            <div class="grid">
+                <div>
+                    <h3>新增商品</h3>
+                    <input type="text" id="itemName" placeholder="商品名称">
+                    <input type="number" id="itemQuantity" placeholder="初始数量">
+                    <input type="text" id="itemCategory" placeholder="商品分类">
+                    <textarea id="itemNote" placeholder="备注"></textarea>
+                    <button onclick="addItem()">添加商品</button>
+                </div>
+                
+                <div>
+                    <h3>出入库操作</h3>
+                    <select id="operationItem"></select>
+                    <input type="number" id="operationAmount" placeholder="数量">
+                    <div>
+                        <button onclick="updateStock('in')" style="background: #27ae60">入库 (+)</button>
+                        <button onclick="updateStock('out')" style="background: #e74c3c">出库 (-)</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📋 库存清单</h2>
+            <div id="stockList" class="grid"></div>
+        </div>
+
+        <div class="card">
+            <h2>🕒 操作记录</h2>
+            <div id="operationRecords" class="record-list"></div>
+        </div>
+    </div>
+
+    <script>
+        // 登录验证
+        function login() {
+            const user = document.getElementById('username').value;
+            const pass = document.getElementById('password').value;
+            
+            if(user === "蚂蚁安全实验室" && pass === "987654321") {
+                document.querySelector('.login-container').style.display = 'none';
+                document.querySelector('.main-container').style.display = 'block';
+                loadData();
+            } else {
+                alert("认证失败，请检查凭据");
+            }
+        }
+
+        // 数据存储
+        let inventory = {
+            items: [],
+            records: []
+        };
+
+        // 初始化加载
+        function loadData() {
+            const savedData = localStorage.getItem('inventoryData');
+            if(savedData) {
+                inventory = JSON.parse(savedData);
+                refreshItems();
+                refreshRecords();
+            }
+        }
+
+        // 添加商品
+        function addItem() {
+            const newItem = {
+                id: Date.now(),
+                name: document.getElementById('itemName').value,
+                category: document.getElementById('itemCategory').value,
+                quantity: parseInt(document.getElementById('itemQuantity').value),
+                note: document.getElementById('itemNote').value
+            };
+            
+            inventory.items.push(newItem);
+            saveData();
+            refreshItems();
+        }
+
+        // 更新库存
+        function updateStock(type) {
+            const itemId = parseInt(document.getElementById('operationItem').value);
+            const amount = parseInt(document.getElementById('operationAmount').value);
+            
+            const item = inventory.items.find(i => i.id === itemId);
+            if(!item) return;
+            
+            const oldQuantity = item.quantity;
+            item.quantity = type === 'in' ? 
+                item.quantity + amount : 
+                Math.max(0, item.quantity - amount);
+            
+            addRecord(itemId, type, amount, oldQuantity);
+            saveData();
+            refreshItems();
+        }
+
+        // 添加记录
+        function addRecord(itemId, type, amount, oldQuantity) {
+            const item = inventory.items.find(i => i.id === itemId);
+            const record = {
+                timestamp: new Date().toLocaleString(),
+                itemId: itemId,
+                operation: type === 'in' ? '入库' : '出库',
+                amount: amount,
+                before: oldQuantity,
+                after: item.quantity,
+                operator: '系统操作员'
+            };
+            
+            inventory.records.unshift(record);
+            refreshRecords();
+        }
+
+        // 刷新界面
+        function refreshItems() {
+            const container = document.getElementById('stockList');
+            const select = document.getElementById('operationItem');
+            
+            container.innerHTML = '';
+            select.innerHTML = '';
+            
+            inventory.items.forEach(item => {
+                // 商品显示
+                container.innerHTML += `
+                    <div class="stock-item">
+                        <h3>${item.name} (${item.category})</h3>
+                        <p>库存量: <span class="highlight">${item.quantity}</span></p>
+                        <p>${item.note || '暂无备注'}</p>
+                    </div>
+                `;
+                
+                // 下拉菜单
+                select.innerHTML += `<option value="${item.id}">${item.name}</option>`;
+            });
+        }
+
+        function refreshRecords() {
+            const container = document.getElementById('operationRecords');
+            container.innerHTML = inventory.records.map(record => `
+                <div class="stock-item">
+                    <p>⏰ ${record.timestamp}</p>
+                    <p>📝 操作: ${record.operation} ${record.amount}件</p>
+                    <p>库存变化: ${record.before} → ${record.after}</p>
+                </div>
+            `).join('');
+        }
+
+        // 数据保存（本地存储 + 云端备份）
+        function saveData() {
+            // 本地存储
+            localStorage.setItem('inventoryData', JSON.stringify(inventory));
+            
+            // 这里可以添加云端存储API调用
+            // 示例: fetch('your-cloud-api', { method: 'POST', body: JSON.stringify(inventory) })
+        }
+
+        // 自动备份（每小时）
+        setInterval(saveData, 3600000);
+    </script>
+</body>
+</html>
